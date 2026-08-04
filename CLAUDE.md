@@ -24,6 +24,7 @@ These guidelines apply to all development tasks in this project. Any deviation r
 * **Completeness Within the Project Folder:** All project-related artifacts—including subtasks, temporary files (`temp/` or `.tmp/`), test files (`tests/`), build scripts, and documentation—must reside **exclusively within the current project directory**.
 * **Logical Directory Structure:** Nothing may be stored outside the project folder. Create and maintain a clear, logical folder hierarchy inside the project.
 * **Clean Git Ignore:** Temporary files, cache directories, or local test artifacts that do not belong in the Git repository must be strictly excluded via `.gitignore`.
+* **File-Based Script Execution & Local Protections:** Avoid relying on inline shell scripts, complex one-liners, or dynamic command evaluation for automation, testing, or subtasks. When executing scripts—especially when local security policies, sandbox controls, or protection mechanisms restrict inline execution—always write them as dedicated script files inside a project-contained temporary directory (e.g., `.tmp/`). Ensure all such temporary files and directories are strictly excluded via `.gitignore`.
 
 ## 4. Internationalization (i18n) & Localization
 * **Default Languages:** The software architecture must support multi-language capabilities. By default, **German (`de`)** and **English (`en`)** must be provided.
@@ -204,29 +205,68 @@ Matched to `heckpiet/find-my-timeline-unraid`, the maintainer's other CA reposit
   license**, so they cannot be redistributed. Only add screenshots taken from an actual
   install.
 
-## 17. Two upstream facts the template documents
+## 17. Upstream behaviour — verified, not assumed
 
-Both were derived by reading upstream source, not from any documentation. They are the
-reason the container fails for Unraid users, and they are duplicated in three places —
-`<Overview>`, `<Requires>` and `README.md`. Editing one means editing all three (§7,
-synchronous documentation audit).
+Everything in this section was confirmed by running the images on a real Unraid 7.3.2 host
+(Docker 29.5.3). Claims here are duplicated into `<Overview>`, `<Requires>` and
+`README.md`; editing one means editing all three (§7, synchronous documentation audit).
 
-1. **UID mismatch.** The image runs as UID/GID 1000; Unraid creates appdata as `99:100`.
-   `build/entrypoint.sh` upstream only copies `config.js.sample` into the config directory
-   `if [ -w "${config_dir}" ]`, otherwise it logs
-   `***ERROR*** No write permission for /opt/magic_mirror/config` and starts with no
-   config. Upstream's compose setup solves this with a `post_start` hook in
-   `run/includes/base.yaml`; Unraid templates have no equivalent, so a one-time
-   `chown -R 1000:1000` is documented instead.
+**The one hard requirement: `<ExtraParams>--user 99:100</ExtraParams>`.** The image
+declares `USER 1000`; Unraid creates appdata as `99:100`. `build/entrypoint.sh` upstream
+only copies its config sample `if [ -w "${config_dir}" ]`, otherwise it logs
+`***ERROR*** No write permission for /opt/magic_mirror/config` and MagicMirror² then aborts
+with `Could not find config file`. Upstream's compose setup solves this with a `post_start`
+hook in `run/includes/base.yaml`; Unraid templates have no equivalent, so the user override
+is the fix. Verified by control run: identical directories without `--user 99:100` fail
+exactly as above. **Do not remove that parameter.**
 
-2. **Localhost binding.** The stock `config.js.sample` from MagicMirrorOrg ships
-   `address: "localhost"` and `ipWhitelist: ["127.0.0.1", "::ffff:127.0.0.1", "::1"]`. The
-   container therefore starts healthy but the WebUI refuses LAN connections until the user
-   edits it.
+**No config editing is required.** An earlier revision of this repo claimed the container
+copies MagicMirrorOrg's stock `config.js.sample` with `address: "localhost"` and a
+loopback-only whitelist, and documented a manual edit. That was wrong, and the mistake is
+worth remembering: the entrypoint copies `${MM_DIR}/__config/config.js.sample`, which is
+**khassel's own sample**, not MagicMirrorOrg's. It ships:
+
+```js
+address: "0.0.0.0",
+ipWhitelist: ["127.0.0.1", "192.168.0.0/16", "172.0.0.0/8"],
+```
+
+Do not infer image behaviour from the MagicMirrorOrg repository. The image carries its own
+config sample, its own entrypoint and its own defaults — verify against the image itself.
+
+The one real gap in that default: **`10.0.0.0/8` is absent**, so users on a 10.x LAN are
+locked out until they extend `ipWhitelist`. That is the only documented troubleshooting
+step.
+
+**Known upstream bug.** Running as any UID other than 1000 makes git reject the app
+directory, since `/opt/magic_mirror` is owned `1000:1000` inside the image:
+`fatal: detected dubious ownership in repository at '/opt/magic_mirror'`. Observed on
+`wolfi-server`, not on `debian-server`. Breaks `updatenotification`, which shells out to
+git; MagicMirror² itself serves normally. The fix belongs in the image —
+`git config --system --add safe.directory /opt/magic_mirror`, since `--system` writes
+`/etc/gitconfig` and works for any uid, whereas the `--global` hint git prints is useless
+when the running uid has no writable HOME.
+
+**Shells differ per variant.** `/bin/bash` exists only in `debian-server`; `wolfi-server`
+and `alpine` ship `/bin/sh` (and `ash`) only. `<Shell>` is a single template-wide value, so
+it tracks the default `<Repository>` tag. If the default tag ever moves to a wolfi or
+alpine variant, `<Shell>` must change to `sh` in the same commit.
+
+Only the `*-server` and `alpine` tags are offered. The `*-electron` variants need a locally
+attached display and cannot work on a headless Unraid server.
 
 MagicMirror² ships no authentication. Under §8 the template must keep telling users to keep
 port 8080 on a trusted LAN or behind an authenticated reverse proxy; do not soften that
 wording.
+
+### Reproducing the verification
+
+`.tmp/test-unraid-images.sh` runs the whole check against a host and cleans up after
+itself. `.tmp/` is gitignored per §3.
+
+```powershell
+ssh qhec02 'sh -s' < .tmp\test-unraid-images.sh
+```
 
 Only the `*-server` and `alpine` tags are offered. The `*-electron` variants need a locally
 attached display and cannot work on a headless Unraid server.
