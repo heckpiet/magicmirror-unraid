@@ -47,9 +47,13 @@ these are rolling tags and will move.
 
 | Tag | Role | amd64 digest | Size | Updated |
 |---|---|---|---|---|
-| `debian-server` | default `<Repository>` | `sha256:c55fdbea49d3e3d767e6aa1025e3bfddb5dc11d42f4ec757dbc8288f61068a50` | 107 MB | 2026-08-04 |
-| `wolfi-server` | selectable `<Branch>` | `sha256:25d6311b8858a14685ff49763d257ac895c9df93017a8a68d69e1c0b8eafa475` | 95 MB | 2026-08-02 |
-| `alpine` | selectable `<Branch>` | `sha256:75c2cd0a1e44fe07d41e11c0d6abfe510618f1f56150a94a133636119c5cd450` | 69 MB | 2026-08-04 |
+| `wolfi-server` | default `<Repository>` | `sha256:1ade98af39129eaab97f09de77162c8a82ccfcb7fcaecf5f8f6db408aa88909b` | 95 MB | 2026-08-04 21:01 |
+| `debian-server` | selectable `<Branch>` | `sha256:018a57ddec3c9f18543e9d5adea7e5c5099e376cb8c791e05dda737bb4e797a8` | 108 MB | 2026-08-04 21:32 |
+| `alpine` | selectable `<Branch>` | `sha256:3509874e9332ce8b8cb03b2cccf341e2f9eaa552fdc11b65922d8d7207a89bbe` | 69 MB | 2026-08-04 21:15 |
+
+All three were rebuilt on 2026-08-04 to carry the permission and `safe.directory` fixes
+listed below. `wolfi-server` is the default under §3's preference for minimal, audited
+bases.
 
 The `*-electron` tags are not referenced — they need a locally attached display.
 
@@ -86,12 +90,18 @@ MagicMirror² promotional renders live in `MagicMirrorOrg/MagicMirror-Website`, 
 carries **no licence at all**. They are therefore not redistributable and are deliberately
 absent from this repository — see `CLAUDE.md` §18.
 
-## Known issues in the dependency
+## Issues found and resolved in the dependency
 
-| Issue | Affects | Status |
+Both were found while verifying this template on real hardware, reported upstream, and
+fixed the same day. Recorded because the fixes are what allow the template to require no
+setup at all.
+
+| Issue | Affected | Resolution |
 |---|---|---|
-| `fatal: detected dubious ownership in repository at '/opt/magic_mirror'` when running as a UID other than 1000. Breaks `updatenotification`; the application itself serves normally. | `wolfi-server`; not observed on `debian-server` | Reported upstream. Fix belongs in the image: `git config --system --add safe.directory /opt/magic_mirror` |
-| Default `ipWhitelist` omits `10.0.0.0/8`, locking out users on a 10.x LAN until they edit `config.js`. | all stable server tags | Reported upstream; documented as the single troubleshooting step in `README.md` |
+| `fatal: detected dubious ownership in repository at '/opt/magic_mirror'` when running as a UID other than 1000, breaking `updatenotification` | `wolfi-server` | [`065f3b8b`](https://gitlab.com/khassel/magicmirror/-/commit/065f3b8b457a5da65e70f1bddc710cd4201576f7) ships `/etc/gitconfig` with a `safe.directory` entry. Verified fixed on all three tags. |
+| Application directory not writable for arbitrary UIDs; default `ipWhitelist` omitted `10.0.0.0/8` and IPv6 loopback | all server tags | [`64be145b`](https://gitlab.com/khassel/magicmirror/-/commit/64be145b4fbdb56d7a15d5b33080a405a5597734) sets `chmod 0777` on the app directory and widens the whitelist. Verified. |
+
+No open issues in the dependency at the time of writing.
 
 No CVEs are tracked here. Vulnerability scanning of the image is upstream's
 responsibility; `wolfi-server` exists specifically as the reduced-CVE variant.

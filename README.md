@@ -18,7 +18,7 @@ to a locally attached display, will not work on Unraid and is deliberately not o
 
 | | |
 |---|---|
-| Image | `karsten13/magicmirror:debian-server` |
+| Image | `karsten13/magicmirror:wolfi-server` |
 | Port | `8080` |
 | Config volume | `/opt/magic_mirror/config` |
 | Modules volume | `/opt/magic_mirror/modules` |
@@ -28,30 +28,24 @@ to a locally attached display, will not work on Unraid and is deliberately not o
 
 **There is none.** Install from Community Applications, open the WebUI, done.
 
-The one thing that makes this work is the `--user 99:100` in *Extra Parameters*. The image
-declares `USER 1000`, while Unraid creates appdata as `99:100` (`nobody:users`). Without
-the override the entrypoint cannot write to the config volume and the container starts
-with no configuration at all. **Do not remove that setting.**
-
-On first start the image writes a working `config.js` that already listens on all
-interfaces, so no manual editing is needed to reach the WebUI.
-
-### If the WebUI does not load
-
-Check your subnet. The `config.js` shipped by the image permits:
+On first start the image writes a working `config.js` that listens on all interfaces and
+already permits the private ranges you are likely on:
 
 ```js
-ipWhitelist: ["127.0.0.1", "192.168.0.0/16", "172.0.0.0/8"],
+address: "0.0.0.0",
+ipWhitelist: ["127.0.0.1", "::ffff:127.0.0.1", "::1", "192.168.0.0/16", "172.16.0.0/12", "10.0.0.0/8"],
 ```
 
-**Networks in the `10.x.x.x` range are not covered.** Edit
-`/mnt/user/appdata/magicmirror/config/config.js`, add your range, and restart:
+Edit that file at `/mnt/user/appdata/magicmirror/config/config.js` to enable modules and
+change the layout. `ipWhitelist: []` allows every address if your network sits outside
+those ranges.
 
-```js
-ipWhitelist: ["127.0.0.1", "192.168.0.0/16", "172.0.0.0/8", "10.0.0.0/8"],
-```
+### Why `--user 99:100` is in Extra Parameters
 
-Setting `ipWhitelist: []` allows every address.
+The image runs as UID 1000. Unraid's appdata belongs to `99:100` (`nobody:users`). Without
+the override the container still starts — Unraid creates the host paths world-writable —
+but every file it writes lands owned `1000:1000`, which is wrong for an Unraid user share
+and confuses the file manager and backup plugins. **Leave the setting in place.**
 
 MagicMirror² has **no authentication**. Anyone who can reach the port sees your calendar
 and whatever else you configure. Keep it on a trusted network and do not forward the port —
@@ -59,37 +53,43 @@ use a VPN or an authenticated HTTPS reverse proxy for remote access.
 
 ## Verified on Unraid
 
-Tested on a real server, not assumed:
+Tested on a real server, not assumed. `scripts/test-unraid-images.sh` reproduces it.
 
 | | |
 |---|---|
 | Unraid | 7.3.2 |
 | Docker | 29.5.3, x86_64 |
-| Images | `debian-server`, `wolfi-server` (both stable) |
-| Result | HTTP 200 within seconds, `config.js` / `custom.css` / `basepath.js` created and owned `99:100` |
+| Images | `wolfi-server`, `debian-server`, `alpine` (all stable) |
+| Result | HTTP 200 within seconds on all three; `config.js`, `custom.css` and `basepath.js` created and owned `99:100` |
 
-A control run on identical directories **without** `--user 99:100` fails exactly as
-expected, which is why the parameter is not optional:
+Two details worth recording, because both look like problems until you check how Unraid
+actually behaves.
 
-```
-[ENTRYPOINT] ***ERROR*** No write permission for /opt/magic_mirror/config, skipping copying config.js
-touch: /opt/magic_mirror/config/custom.css: Permission denied
-[ERROR] [utils] Could not find config file: /opt/magic_mirror/config/config.js
-```
+**Unraid creates the host paths itself, and does it correctly.** A plain `docker run`
+against a non-existent bind-mount path lets Docker create it as `root:root 0755`, and the
+container then cannot write. That is *not* what happens on install: Unraid's docker manager
+creates missing paths with `mkdir 0777` followed by `chown 99` / `chgrp 100`
+(`dynamix.docker.manager/include/Helpers.php`). So the first run works with no
+intervention.
 
-### Known upstream issue
+**The `--user` override is about ownership, not about starting.** Because those paths are
+world-writable, the container also runs without it — but the files it writes end up owned
+`1000:1000` instead of `99:100`.
 
-Running as any UID other than 1000 makes `git` reject the application directory, because
-`/opt/magic_mirror` is owned by `1000:1000` inside the image:
+### Previously reported, now fixed upstream
 
-```
-fatal: detected dubious ownership in repository at '/opt/magic_mirror'
-```
+Running as a UID other than 1000 used to make git reject the application directory
+(`fatal: detected dubious ownership in repository at '/opt/magic_mirror'`), which broke the
+`updatenotification` module. Fixed in
+[065f3b8b](https://gitlab.com/khassel/magicmirror/-/commit/065f3b8b457a5da65e70f1bddc710cd4201576f7)
+by shipping `/etc/gitconfig` with a `safe.directory` entry. Verified: `git rev-parse` now
+succeeds as UID 99 on all three variants.
 
-Observed on `wolfi-server`, not on `debian-server`. The `updatenotification` module uses
-git to detect new releases, so on the affected variants it cannot report updates.
-MagicMirror² itself is unaffected and serves normally. Reported upstream; the fix belongs
-in the image (`git config --system --add safe.directory /opt/magic_mirror`).
+The same round of upstream fixes
+([64be145b](https://gitlab.com/khassel/magicmirror/-/commit/64be145b4fbdb56d7a15d5b33080a405a5597734))
+made the application directory writable for arbitrary UIDs and widened the default
+`ipWhitelist` to cover `10.0.0.0/8`, `172.16.0.0/12` and IPv6 loopback — which is why this
+template no longer documents a subnet workaround.
 
 ## Installing modules
 
@@ -106,15 +106,14 @@ on the container and run `npm install` in the module's directory.
 The template's tag selector offers three server-only variants. All are amd64-capable,
 which is all Unraid needs.
 
-| Tag | Base | Shell | Notes |
-|---|---|---|---|
-| `debian-server` | Debian 13 | `bash`, `sh` | Default. Broadest module compatibility. |
-| `wolfi-server` | Wolfi | `sh` only | Smaller, reduced CVE surface. |
-| `alpine` | Alpine | `sh` only | Smallest. Some native modules may fail to build. |
+| Tag | Base | Size | Shell | Notes |
+|---|---|---|---|---|
+| `wolfi-server` | Wolfi | 95 MB | `sh` | Default. Minimal, regularly rebuilt, reduced CVE surface. |
+| `debian-server` | Debian 13 | 108 MB | `bash`, `sh` | Broadest compatibility for modules that compile native dependencies. |
+| `alpine` | Alpine | 69 MB | `sh` | Smallest. Some native modules may fail to build against musl. |
 
-The template's *Console Shell Command* is set to `bash`, which only exists in
-`debian-server`. Switch it to `sh` if you select one of the other two, otherwise opening a
-container console fails.
+The template's *Console Shell Command* is set to `sh`, which all three provide. Switch it
+to `bash` only if you select `debian-server` and want it.
 
 The `*-electron` tags are intentionally not offered — they require a local display.
 

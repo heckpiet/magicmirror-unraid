@@ -15,6 +15,41 @@ metadata only.
 
 Nothing yet.
 
+## [1.1.0] — 2026-08-04
+
+Upstream fixed both defects this template had reported, which removed the last reason to
+prefer a larger base image and the last piece of troubleshooting from the documentation.
+
+### Changed
+
+- Default image is now `wolfi-server` instead of `debian-server`: a minimal, regularly
+  rebuilt base with a reduced CVE surface, and the variant the image maintainer
+  recommends. `debian-server` and `alpine` remain selectable.
+- `<Shell>` moved from `bash` to `sh`, which all three variants provide. Only
+  `debian-server` ships bash, so the template-wide value has to follow the default tag.
+- The rationale for `--user 99:100` is now ownership rather than startup. Unraid creates
+  the host paths world-writable, so the container also starts without the override — but
+  files then land owned `1000:1000` inside an Unraid user share. The parameter stays; the
+  reason changed.
+
+### Removed
+
+- The 10.x subnet workaround. Upstream widened the default `ipWhitelist` to cover
+  `10.0.0.0/8`, `172.16.0.0/12` and IPv6 loopback, so the template no longer documents a
+  troubleshooting step at all.
+- The `git` `safe.directory` defect from the known-issues list, fixed upstream in
+  [`065f3b8b`](https://gitlab.com/khassel/magicmirror/-/commit/065f3b8b457a5da65e70f1bddc710cd4201576f7)
+  by shipping `/etc/gitconfig`. Verified: `git rev-parse` succeeds as UID 99 on all three
+  variants.
+
+### Fixed
+
+- Corrected a documented claim that the container fails to start when appdata directories
+  do not pre-exist. That failure only occurs under a plain `docker run`, where Docker
+  creates the path as `root:root 0755`. Unraid's own docker manager creates missing paths
+  with `mkdir 0777` then `chown 99` / `chgrp 100`, so a real install is unaffected. The
+  verification script now covers both scenarios so the distinction cannot be lost again.
+
 ## [1.0.0] — 2026-08-04
 
 First release. Verified against a real Unraid 7.3.2 host (Docker 29.5.3) rather than
@@ -67,5 +102,6 @@ Not yet submitted to Community Applications. The upstream image maintainer was o
 listing and declined — he has no Unraid system to test on — so this repository remains the
 maintainer of record.
 
-[Unreleased]: https://github.com/heckpiet/magicmirror-unraid/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/heckpiet/magicmirror-unraid/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/heckpiet/magicmirror-unraid/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/heckpiet/magicmirror-unraid/releases/tag/v1.0.0

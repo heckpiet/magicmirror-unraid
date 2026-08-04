@@ -94,13 +94,13 @@ made.
 
 | # | Guideline | Status | Question for the maintainer |
 |---|---|---|---|
-| §3 | Hardened containers, minimal audited base images | **Conflict, deferred** | §3 prefers Alpine/Distroless, and the upstream image maintainer also prefers `wolfi-server`. The template nonetheless defaults to `debian-server`, because it is currently the only variant free of the git `safe.directory` bug (§19) and the only one shipping `bash` for the Unraid console. The intent is to switch once that bug is fixed upstream; until then this stays open rather than resolved, because the switch also forces `<Shell>` to `sh` in the same commit. |
 | §8 | Conventional Commits for the earliest four commits | **Partially violated** | The four earliest commits predate the ruleset and use plain imperative subjects. Everything since uses `type: subject`. `.tmp/rewrite-commit-subjects.sh` is written and ready, but the rewrite plus force-push was blocked by the local permission system and needs explicit authorisation to run. |
 
 ### Decided — 2026-08-04
 
 | # | Guideline | Decision |
 |---|---|---|
+| §3 | Hardened containers, minimal audited base images | **Resolved by upstream.** The template defaulted to `debian-server` only because it was the sole variant free of the git `safe.directory` bug. Upstream fixed that in `065f3b8b`, so v1.1.0 switched the default to `wolfi-server` — minimal base, reduced CVE surface, and the maintainer's own recommendation. `<Shell>` moved to `sh` in the same commit, as required. `debian-server` remains selectable for modules needing bash or glibc. |
 | §4 | i18n, German **and** English | **English only, approved.** Unraid CA has no localization mechanism: `<Overview>`, `<Requires>` and `<Profile>` are single-value fields and CA renders one string to every user worldwide. Compliance is technically impossible without CA support. Do not add German strings; they would be dead weight the portal never reads. |
 | §7 | `.env.example` required | **Omitted, approved.** This repo has no runtime configuration of its own. The container's environment variables are declared as `<Config Type="Variable">` entries in `templates/magicmirror.xml`, which is the machine-readable form Unraid actually consumes. A parallel `.env.example` would duplicate it and drift. |
 | §8 | SemVer | **Adopted.** `CHANGELOG.md` follows Keep a Changelog; the repo is at `1.0.0` and tagged. Versioning describes *the template*, not MagicMirror² or the image. MAJOR means an existing install needs manual intervention (changed volume path, removed variable, different image); MINOR adds optional capability; PATCH is documentation or metadata. |
@@ -235,14 +235,23 @@ Everything here was confirmed by running the images on a real Unraid 7.3.2 host
 (Docker 29.5.3). These claims are duplicated into `<Overview>`, `<Requires>` and
 `README.md`; editing one means editing all three (§8, synchronous documentation audit).
 
-**The one hard requirement: `<ExtraParams>--user 99:100</ExtraParams>`.** The image declares
-`USER 1000`; Unraid creates appdata as `99:100`. `build/entrypoint.sh` upstream only copies
-its config sample `if [ -w "${config_dir}" ]`, otherwise it logs
-`***ERROR*** No write permission for /opt/magic_mirror/config` and MagicMirror² then aborts
-with `Could not find config file`. Upstream's compose setup solves this with a `post_start`
-hook in `run/includes/base.yaml`; Unraid templates have no equivalent, so the user override
-is the fix. Verified by control run: identical directories without `--user 99:100` fail
-exactly as above. **Do not remove that parameter.**
+**Unraid creates the host paths, and it does so correctly.** This is the fact that makes
+the template work, and it is easy to get wrong when testing. A plain `docker run` against a
+non-existent bind-mount path lets Docker create it `root:root 0755`, the container cannot
+write, and the entrypoint logs
+`***ERROR*** No write permission for /opt/magic_mirror/config`. That failure is an artefact
+of testing with raw Docker. Unraid's own docker manager creates missing paths with
+`mkdir 0777` then `chown 99` / `chgrp 100` — see
+`/usr/local/emhttp/plugins/dynamix.docker.manager/include/Helpers.php`. **Reproduce the
+Unraid path creation before concluding that a permission problem exists.**
+
+**`<ExtraParams>--user 99:100</ExtraParams>` is about ownership, not about starting.**
+Because those paths are world-writable, the container runs without the override too — but
+files then land owned `1000:1000` inside an Unraid user share, which is wrong for the file
+manager and for backup plugins. Verified both ways. Keep the parameter; the justification
+is hygiene, not failure. (Before upstream's `64be145b` it *was* a hard requirement, since
+the application directory was not writable for arbitrary UIDs. Do not restore that older
+reasoning to the docs.)
 
 **No config editing is required.** An earlier revision of this repo claimed the container
 copies MagicMirrorOrg's stock `config.js.sample` with `address: "localhost"` and a
@@ -252,30 +261,28 @@ worth remembering: the entrypoint copies `${MM_DIR}/__config/config.js.sample`, 
 
 ```js
 address: "0.0.0.0",
-ipWhitelist: ["127.0.0.1", "192.168.0.0/16", "172.0.0.0/8"],
+ipWhitelist: ["127.0.0.1", "::ffff:127.0.0.1", "::1", "192.168.0.0/16", "172.16.0.0/12", "10.0.0.0/8"],
 ```
 
 Do not infer image behaviour from the MagicMirrorOrg repository. The image carries its own
 config sample, its own entrypoint and its own defaults — verify against the image itself.
 
-The one real gap in that default: **`10.0.0.0/8` is absent**, so users on a 10.x LAN are
-locked out until they extend `ipWhitelist`. That is the only documented troubleshooting
-step.
+An earlier revision documented a subnet workaround because the default omitted
+`10.0.0.0/8`. Upstream widened the list in `64be145b`; the workaround is gone and must not
+be reinstated without re-testing.
 
-**Known upstream bug.** Running as any UID other than 1000 makes git reject the app
-directory, since `/opt/magic_mirror` is owned `1000:1000` inside the image:
-`fatal: detected dubious ownership in repository at '/opt/magic_mirror'`. Observed on
-`wolfi-server`, not on `debian-server`. It breaks `updatenotification`, which shells out to
-git; MagicMirror² itself serves normally. The fix belongs in the image —
-`git config --system --add safe.directory /opt/magic_mirror`, since `--system` writes
-`/etc/gitconfig` and works for any uid, whereas the `--global` hint git prints is useless
-when the running uid has no writable HOME. This bug is why the default tag is still
-`debian-server` despite §3 favouring minimal bases — see the conflict row in §14.
+**Fixed upstream, do not re-document as a defect.** Running as a UID other than 1000 used
+to make git reject the app directory
+(`fatal: detected dubious ownership in repository at '/opt/magic_mirror'`), breaking
+`updatenotification`. Upstream fixed it in `065f3b8b` by shipping `/etc/gitconfig` with a
+`safe.directory` entry — the system-wide form, which works for any uid, unlike the
+`--global` hint git itself prints. Verified: `git rev-parse` succeeds as UID 99 on all
+three variants.
 
 **Shells differ per variant.** `/bin/bash` exists only in `debian-server`; `wolfi-server`
 and `alpine` ship `/bin/sh` (and `ash`) only. `<Shell>` is a single template-wide value, so
-it tracks the default `<Repository>` tag. If the default ever moves to a wolfi or alpine
-variant, `<Shell>` must change to `sh` in the same commit.
+it tracks the default `<Repository>` tag — currently `sh`, since the default is
+`wolfi-server`. Any change of default tag must move `<Shell>` in the same commit.
 
 Only the `*-server` and `alpine` tags are offered. The `*-electron` variants need a locally
 attached display and cannot work on a headless Unraid server.
