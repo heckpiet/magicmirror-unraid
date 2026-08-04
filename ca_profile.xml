@@ -1,18 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <CommunityApplications>
-  <Profile>
-Unraid Community Applications template for **MagicMirror&#178;**, the open source modular smart mirror platform.
-
-The template runs MagicMirror&#178; in **server-only mode**, which is the right fit for a headless Unraid box: MagicMirror&#178; renders in your browser (or on a separate client device such as a Raspberry Pi) instead of on a locally attached display.
-
-The container image used by this template is `karsten13/magicmirror`, built and maintained by [Karsten Hassel](https://gitlab.com/khassel/magicmirror). This repository only provides the Unraid packaging &#8212; it does not fork, rebuild or modify the image.
-
-**Where to get help**
-
-* Problems with the Unraid template itself (paths, ports, permissions): [open an issue here](https://github.com/heckpiet/magicmirror-unraid/issues)
-* Problems with the container image: [khassel/magicmirror on GitLab](https://gitlab.com/khassel/magicmirror/-/issues)
-* Problems with MagicMirror&#178; or its modules: [MagicMirror&#178; forum](https://forum.magicmirror.builders/)
-  </Profile>
+  <Profile>Community Applications repository maintained by Peter Hecko, packaging MagicMirror&#178; for Unraid. MagicMirror&#178; is an open source modular smart mirror platform. This template runs it in server-only mode, the correct mode for a headless Unraid server: the interface is served over HTTP and rendered in a browser or on a separate client device such as a Raspberry Pi. The container image is karsten13/magicmirror, built and maintained by Karsten Hassel at https://gitlab.com/khassel/magicmirror. This repository provides only the Unraid packaging and does not fork, rebuild or modify that image. Report template issues at https://github.com/heckpiet/magicmirror-unraid/issues, image issues at https://gitlab.com/khassel/magicmirror/-/issues and MagicMirror&#178; or module issues at https://forum.magicmirror.builders.</Profile>
   <Icon>https://raw.githubusercontent.com/heckpiet/magicmirror-unraid/main/icon.svg</Icon>
   <WebPage>https://github.com/heckpiet/magicmirror-unraid</WebPage>
+  <Forum>https://github.com/heckpiet/magicmirror-unraid/issues</Forum>
 </CommunityApplications>

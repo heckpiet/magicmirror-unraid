@@ -95,6 +95,23 @@ The `*-electron` tags are intentionally not offered — they require a local dis
 | The container image | [khassel/magicmirror on GitLab](https://gitlab.com/khassel/magicmirror/-/issues) |
 | MagicMirror² itself or a module | [MagicMirror² forum](https://forum.magicmirror.builders/) |
 
+## Screenshots
+
+The CA listing currently ships without screenshots. MagicMirror²'s official promotional
+renders come from the
+[MagicMirror-Website](https://github.com/MagicMirrorOrg/MagicMirror-Website) repository,
+which carries **no license**, so they are deliberately not bundled here.
+
+To add screenshots, drop your own PNGs of a running instance into this repo and reference
+them from `templates/magicmirror.xml`:
+
+```xml
+<Screenshot>https://raw.githubusercontent.com/heckpiet/magicmirror-unraid/main/preview.png</Screenshot>
+```
+
+A browser screenshot of your own install represents this server-only container more
+honestly than a hardware render anyway.
+
 ## Handover checklist
 
 This repo is deliberately written so it can be transferred to, or forked by, the upstream
