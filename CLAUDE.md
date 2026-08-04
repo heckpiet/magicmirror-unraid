@@ -94,13 +94,18 @@ made.
 
 | # | Guideline | Status | Question for the maintainer |
 |---|---|---|---|
-| §3 | Hardened containers, minimal audited base images | **Conflict** | §3 prefers Alpine/Distroless, and the upstream image maintainer also prefers `wolfi-server`. The template nonetheless defaults to `debian-server`, because it is currently the only variant free of the git `safe.directory` bug (§19) and the only one shipping `bash` for the Unraid console. Approve keeping `debian-server` until that bug is fixed upstream, then switching? |
-| §4 | i18n, German **and** English | **Blocked, cannot comply** | Unraid CA has no localization mechanism. `<Overview>`, `<Requires>` and `<Profile>` are single-value fields and CA renders exactly one string to every user worldwide. Providing `de` is technically impossible without CA support. Approve English-only? |
-| §7 | `.env.example` required | **Open** | This repo has no runtime configuration of its own. The container's environment variables are declared as `<Config Type="Variable">` entries in `templates/magicmirror.xml`, which is the canonical machine-readable equivalent that Unraid actually consumes. Approve omitting a separate `.env.example`, or add one purely as documentation? |
-| §8 | SemVer on every change | **Not implemented** | The repo carries no version. Sibling repo `find-my-timeline-unraid` maintains `CHANGELOG.md` and versioned releases. Adding both here, with the version reflected in the template's `<Changes>`, would align the two. Approve? |
-| §8 | Conventional Commits | **Partially violated** | The four earliest commits predate the ruleset and use plain imperative subjects. Everything since uses `type: subject`. History has already been rewritten once (to strip AI co-author trailers), so converting the early subjects costs one further force-push. Approve, or leave the early history as is? |
-| §8 | CI/CD must run error-free | **Not implemented** | No pipeline exists. `.tmp/verify-repo.sh` already performs the full gate locally; promoting it to a GitHub Actions workflow on every push would satisfy this cheaply. Approve? |
-| §11 | SBOM | **Not implemented** | The only dependency is the upstream container image and its two upstream projects. A short `SBOM.md` recording image, tags, upstream repositories and licenses is meaningful; a generated SPDX/CycloneDX document is not, since nothing is built here. Approve the lightweight form? |
+| §3 | Hardened containers, minimal audited base images | **Conflict, deferred** | §3 prefers Alpine/Distroless, and the upstream image maintainer also prefers `wolfi-server`. The template nonetheless defaults to `debian-server`, because it is currently the only variant free of the git `safe.directory` bug (§19) and the only one shipping `bash` for the Unraid console. The intent is to switch once that bug is fixed upstream; until then this stays open rather than resolved, because the switch also forces `<Shell>` to `sh` in the same commit. |
+| §8 | Conventional Commits for the earliest four commits | **Partially violated** | The four earliest commits predate the ruleset and use plain imperative subjects. Everything since uses `type: subject`. `.tmp/rewrite-commit-subjects.sh` is written and ready, but the rewrite plus force-push was blocked by the local permission system and needs explicit authorisation to run. |
+
+### Decided — 2026-08-04
+
+| # | Guideline | Decision |
+|---|---|---|
+| §4 | i18n, German **and** English | **English only, approved.** Unraid CA has no localization mechanism: `<Overview>`, `<Requires>` and `<Profile>` are single-value fields and CA renders one string to every user worldwide. Compliance is technically impossible without CA support. Do not add German strings; they would be dead weight the portal never reads. |
+| §7 | `.env.example` required | **Omitted, approved.** This repo has no runtime configuration of its own. The container's environment variables are declared as `<Config Type="Variable">` entries in `templates/magicmirror.xml`, which is the machine-readable form Unraid actually consumes. A parallel `.env.example` would duplicate it and drift. |
+| §8 | SemVer | **Adopted.** `CHANGELOG.md` follows Keep a Changelog; the repo is at `1.0.0` and tagged. Versioning describes *the template*, not MagicMirror² or the image. MAJOR means an existing install needs manual intervention (changed volume path, removed variable, different image); MINOR adds optional capability; PATCH is documentation or metadata. |
+| §8 | CI/CD | **Adopted.** `.github/workflows/verify.yml` runs `scripts/verify-repo.sh` on every push and pull request, and `scripts/check-links.sh` on pushes plus a weekly schedule. Split by determinism: the gate is offline and must never be flaky; the link check talks to a CDN, so it retries with backoff and is skipped on pull requests, where the URLs legitimately do not exist yet. |
+| §11 | SBOM | **Adopted in lightweight form.** `SBOM.md` records the single image dependency, its per-tag amd64 digests, the upstream licence chain and the two known upstream defects. A generated SPDX/CycloneDX document was rejected as meaningless here: nothing is built, so it would describe an empty graph. |
 
 ### Not applicable — confirm this reading
 
@@ -110,7 +115,7 @@ made.
 | §6 | Contract-first API design | This repo exposes no API. The XML schema it targets is defined by Unraid CA, not by us; `<Container version="2">` is CA's own contract version. |
 | §9 | Versioned database migrations | No database. |
 | §10 | UI/UX, WCAG | No UI. The rendered interface belongs to MagicMirror² upstream. |
-| §11 | Strict typing, linting, test coverage | No executable code. The equivalent gate is XML well-formedness plus URL reachability plus encoding, automated in `.tmp/verify-repo.sh` (§16). |
+| §11 | Strict typing, linting, test coverage | No executable code. The equivalent gate is XML well-formedness plus URL reachability plus encoding, automated in `scripts/verify-repo.sh` and `scripts/check-links.sh` (§16). |
 | §12 | Health check endpoints, JSON logging | Belongs to the image, not the packaging. The upstream image does ship a healthcheck (`node /opt/healthcheck.js`), but Unraid templates expose no field to configure or override it. |
 | §13 | Graceful shutdown, idempotency, backoff | No process of ours runs. Signal handling is the image's concern. |
 
@@ -119,15 +124,15 @@ Do not resolve any row above unilaterally. Ask, then record the decision here.
 ### Satisfied — do not regress
 
 **§3 encoding and structure.** All tracked files are UTF-8 without BOM, verified by
-`.tmp/verify-repo.sh`. Scratch scripts live in the project-contained `.tmp/`, which is
-gitignored.
+`scripts/verify-repo.sh`. Reusable tooling is committed under `scripts/`; genuinely
+single-use scratch work goes in the project-contained `.tmp/`, which is gitignored.
 
 **§8 commit authorship.** Commits are authored and committed as
 `heckpiet <heckpiet@gmail.com>`, set in this repository's local git config. **Never add a
 `Co-Authored-By:` trailer naming an AI tool, never add `Signed-off-by` on an AI's behalf,
 and never set author or committer metadata to anything but the human maintainer.** The
 history was rewritten on 2026-08-04 to remove such trailers; do not reintroduce them.
-`.tmp/verify-repo.sh` checks both the identity fields and the trailer form. Match the
+`scripts/verify-repo.sh` checks both the identity fields and the trailer form. Match the
 trailer form, not the bare word — prose describing this very rule otherwise produces false
 positives, and `CLAUDE.md` is a filename, not authorship metadata.
 
@@ -167,25 +172,22 @@ Unraid system to test on — so this repository stays with heckpiet.
 
 ## 16. Verification commands
 
-`.tmp/verify-repo.sh` runs the full gate and exits non-zero on the first failure. Per §3 it
-is a script file, not an inline one-liner.
+Two committed scripts, both POSIX `sh` so they run identically on the maintainer's Windows
+box and on `ubuntu-latest`. Per §3 they are script files, not inline one-liners.
 
 ```powershell
-sh .tmp\verify-repo.sh
+sh scripts\verify-repo.sh    # XML well-formedness, UTF-8 without BOM, no AI attribution
+sh scripts\check-links.sh    # every raw URL the template references still resolves
 ```
 
-It covers XML well-formedness of the two files CA parses, UTF-8-without-BOM across every
-tracked file, and the absence of AI attribution in git metadata (§8).
+CI runs both — see `.github/workflows/verify.yml`. The gate runs on every push and pull
+request; the link check is skipped on pull requests, where the URLs legitimately do not
+exist yet, and runs weekly to catch URL rot that no push would reveal.
 
-Separately, every raw URL referenced from the XML must resolve — CA silently serves a
-broken listing if one 404s:
-
-```powershell
-@("templates/magicmirror.xml","ca_profile.xml","icon.svg","README.md") | ForEach-Object {
-  $u = "https://raw.githubusercontent.com/heckpiet/magicmirror-unraid/main/$_"
-  try { "$((Invoke-WebRequest $u -UseBasicParsing).StatusCode)  $_" } catch { "FAIL  $_" }
-}
-```
+**`scripts/` is committed, `.tmp/` is not.** Anything CI executes, or that documents how a
+result was reproduced, belongs in `scripts/`. `.tmp/` is for genuinely single-use work such
+as a one-off history rewrite. Putting a gate script in `.tmp/` would make it unavailable to
+CI and lost on clone.
 
 Then run **Validate** and **Scan** at <https://ca.unraid.net/submit/new>. That portal is the
 source of truth, not any third-party guide.
@@ -280,11 +282,11 @@ attached display and cannot work on a headless Unraid server.
 
 ### Reproducing the verification
 
-`.tmp/test-unraid-images.sh` runs the whole check against a host and cleans up after
+`scripts/test-unraid-images.sh` runs the whole check against a host and cleans up after
 itself:
 
 ```powershell
-ssh qhec02 'sh -s' < .tmp\test-unraid-images.sh
+ssh qhec02 'sh -s' < scripts\test-unraid-images.sh
 ```
 
 Inline heredocs trip the local protection that blocks `rm -rf` patterns, which is the
