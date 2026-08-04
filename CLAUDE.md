@@ -40,6 +40,7 @@ These guidelines apply to all development tasks in this project. Any deviation r
 * **Env Templates:** Every repository must contain an `.env.example` or `config.example.json` documenting all required environment variables with sensible default/example values.
 
 ## 7. Git, Versioning & Documentation Audit
+* **Git Authorship & Human User Identity:** All code modifications, commits, pull requests, and Git operations must be authored and committed exclusively under the current human developer/user account credentials. Never attribute commits, co-authorships, sign-offs, or Git metadata to AI agents, AI bots, or specific AI tools (e.g., Claude, ChatGPT, Copilot, etc.). AI identities must never appear in the commit history or contributor lists.
 * **Versioning on Changes:** Every change to the software requires a transparent and correct version update according to Semantic Versioning (`MAJOR.MINOR.PATCH`).
 * **Synchronous Documentation Audit:** Whenever software or version changes occur, **all** affected files and documentation must be reviewed and updated within the same pull request/commit context.
 * **Repository Cleanliness:** Keep the Git repository consistent and up to date with every change. Commits must be cleanly split and traceable.
@@ -83,13 +84,28 @@ is made.
 | §4 | i18n, German **and** English | **Blocked, cannot comply** | Unraid CA has no localization mechanism. `<Overview>`, `<Requires>` and `<Profile>` are single-value fields and CA renders exactly one string to every user worldwide. Providing `de` is technically impossible without CA support. Approve English-only? |
 | §6 | `.env.example` required | **Open** | This repo has no runtime configuration of its own. The container's environment variables are declared as `<Config Type="Variable">` entries in `templates/magicmirror.xml`, which is the canonical, machine-readable equivalent. Approve omitting a separate `.env.example`, or add one purely as documentation? |
 | §7 | SemVer on every change | **Not yet implemented** | The repo currently carries no version. Sibling repo `find-my-timeline-unraid` maintains `CHANGELOG.md` and versioned releases. Adding `CHANGELOG.md` plus a version reflected in `<Changes>` would align the two. Approve? |
-| §7 | Conventional Commits | **Violated by existing history** | Commits `45a5ca9`, `b9a99c7`, `86129d7` predate this ruleset and use plain imperative subjects. All future commits will use Conventional Commits. Rewriting the pushed history is possible but would break any clone. Approve leaving history as is? |
+| §7 | Conventional Commits | **Open** | The four commits predating this ruleset use plain imperative subjects rather than `type: subject`. History has already been rewritten once (to strip AI co-author trailers), so converting the subjects costs one further force-push. Approve, or leave the early history as is? |
 | §7 | CI/CD must run error-free | **Not yet implemented** | No pipeline exists. The two verification steps in §14 are currently manual. A GitHub Actions workflow running both on every push would satisfy this cheaply. Approve? |
 | §10 | SBOM / BOM | **Not yet implemented** | The only "dependency" is the upstream container image and its two upstream projects. A short `SBOM.md` recording image, tags, upstream repositories and their licenses is meaningful here; a generated SPDX/CycloneDX document is not, since nothing is built. Approve the lightweight form? |
 | §10 | Test coverage, strict typing, linting | **Not applicable** | No executable code exists to type, lint or unit-test. The equivalent quality gate is XML well-formedness plus URL reachability (§14). Confirm this reading? |
 | §9, §11 | UI/UX, resource management | **Not applicable** | No UI and no runtime in this repository. The rendered UI belongs to MagicMirror² upstream. |
 
 Do not resolve any row above unilaterally. Ask, then record the decision here.
+
+### Enforced: commit authorship (§7)
+
+Commits are authored and committed as `heckpiet <heckpiet@gmail.com>`, configured in this
+repository's local git config. **Never add a `Co-Authored-By:` trailer naming an AI tool,
+never add `Signed-off-by` on an AI's behalf, and never set author or committer metadata to
+anything other than the human maintainer.** The history was rewritten on 2026-08-04 to
+remove such trailers; do not reintroduce them. Verify before pushing:
+
+```powershell
+git log --all --pretty=format:"%an <%ae>|%B" | Select-String -Pattern "claude|anthropic|copilot|chatgpt|co-authored" -CaseSensitive:$false
+```
+
+That search must return nothing. `CLAUDE.md` itself is the one legitimate match for the
+word "claude" in the working tree — it is a filename, not authorship metadata.
 
 ---
 
