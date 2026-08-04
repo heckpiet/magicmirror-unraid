@@ -1,0 +1,15 @@
+# Normalise line endings on commit. The maintainer works on Windows while CI
+# runs on ubuntu-latest, and a shell script committed with CRLF fails there with
+# "bad interpreter" - the carriage return becomes part of the shebang path.
+* text=auto eol=lf
+
+# Belt and braces for the files where CRLF is an outright failure rather than
+# cosmetic noise.
+*.sh   text eol=lf
+*.xml  text eol=lf
+*.yml  text eol=lf
+*.svg  text eol=lf
+*.md   text eol=lf
+
+# Keep the executable bit on the verification scripts.
+scripts/*.sh text eol=lf
