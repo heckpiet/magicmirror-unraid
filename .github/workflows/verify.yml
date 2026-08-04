@@ -1,0 +1,47 @@
+name: verify
+
+# CLAUDE.md section 8 requires pipelines to run error-free. The two jobs are
+# split by determinism: `gate` is offline and must never be flaky, `links`
+# talks to a CDN and therefore retries and runs on a schedule of its own.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly, to catch raw-URL rot that no push would reveal.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: repository quality gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The AI-attribution check inspects every commit, so a shallow
+          # clone would silently pass.
+          fetch-depth: 0
+
+      - name: Install xmllint
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libxml2-utils
+
+      - name: Run quality gate
+        run: sh scripts/verify-repo.sh
+
+  links:
+    name: raw URL reachability
+    # Pull requests from forks cannot have pushed to main yet, so the URLs
+    # would legitimately 404. Skip rather than fail.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check every URL referenced by the template
+        run: sh scripts/check-links.sh
