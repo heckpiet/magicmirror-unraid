@@ -22,47 +22,74 @@ to a locally attached display, will not work on Unraid and is deliberately not o
 | Port | `8080` |
 | Config volume | `/opt/magic_mirror/config` |
 | Modules volume | `/opt/magic_mirror/modules` |
-| Runs as | UID/GID `1000` |
+| Extra Parameters | `--user 99:100` |
 
 ## Setup
 
-Two one-time steps are required. Skip either one and the container will not work.
+**There is none.** Install from Community Applications, open the WebUI, done.
 
-### 1. Fix the appdata permissions — *before* the first start
+The one thing that makes this work is the `--user 99:100` in *Extra Parameters*. The image
+declares `USER 1000`, while Unraid creates appdata as `99:100` (`nobody:users`). Without
+the override the entrypoint cannot write to the config volume and the container starts
+with no configuration at all. **Do not remove that setting.**
 
-The image runs as UID/GID `1000`, but Unraid creates appdata directories as `99:100`
-(`nobody:users`). The container's entrypoint needs write access to create its default
-config, and without it you will see this in the log:
+On first start the image writes a working `config.js` that already listens on all
+interfaces, so no manual editing is needed to reach the WebUI.
+
+### If the WebUI does not load
+
+Check your subnet. The `config.js` shipped by the image permits:
+
+```js
+ipWhitelist: ["127.0.0.1", "192.168.0.0/16", "172.0.0.0/8"],
+```
+
+**Networks in the `10.x.x.x` range are not covered.** Edit
+`/mnt/user/appdata/magicmirror/config/config.js`, add your range, and restart:
+
+```js
+ipWhitelist: ["127.0.0.1", "192.168.0.0/16", "172.0.0.0/8", "10.0.0.0/8"],
+```
+
+Setting `ipWhitelist: []` allows every address.
+
+MagicMirror² has **no authentication**. Anyone who can reach the port sees your calendar
+and whatever else you configure. Keep it on a trusted network and do not forward the port —
+use a VPN or an authenticated HTTPS reverse proxy for remote access.
+
+## Verified on Unraid
+
+Tested on a real server, not assumed:
+
+| | |
+|---|---|
+| Unraid | 7.3.2 |
+| Docker | 29.5.3, x86_64 |
+| Images | `debian-server`, `wolfi-server` (both stable) |
+| Result | HTTP 200 within seconds, `config.js` / `custom.css` / `basepath.js` created and owned `99:100` |
+
+A control run on identical directories **without** `--user 99:100` fails exactly as
+expected, which is why the parameter is not optional:
 
 ```
 [ENTRYPOINT] ***ERROR*** No write permission for /opt/magic_mirror/config, skipping copying config.js
+touch: /opt/magic_mirror/config/custom.css: Permission denied
+[ERROR] [utils] Could not find config file: /opt/magic_mirror/config/config.js
 ```
 
-Open the Unraid terminal and run:
+### Known upstream issue
 
-```sh
-mkdir -p /mnt/user/appdata/magicmirror/config /mnt/user/appdata/magicmirror/modules
-chown -R 1000:1000 /mnt/user/appdata/magicmirror
+Running as any UID other than 1000 makes `git` reject the application directory, because
+`/opt/magic_mirror` is owned by `1000:1000` inside the image:
+
+```
+fatal: detected dubious ownership in repository at '/opt/magic_mirror'
 ```
 
-### 2. Make MagicMirror² reachable on your LAN
-
-On first start the container copies MagicMirror²'s stock `config.js` into your config
-folder. That stock config listens on `localhost` only and whitelists just the loopback
-address, so the WebUI will refuse connections from other machines.
-
-Edit `/mnt/user/appdata/magicmirror/config/config.js`:
-
-```js
-address: "0.0.0.0",
-ipWhitelist: ["127.0.0.1", "::ffff:127.0.0.1", "::1", "192.168.0.0/16", "172.16.0.0/12", "10.0.0.0/8"],
-```
-
-Restart the container. Narrow the whitelist to your own subnet if you prefer, or set it
-to `[]` to allow every address.
-
-MagicMirror² is **not** authenticated. Do not expose port 8080 to the internet — put it
-behind a reverse proxy with authentication if you need remote access.
+Observed on `wolfi-server`, not on `debian-server`. The `updatenotification` module uses
+git to detect new releases, so on the affected variants it cannot report updates.
+MagicMirror² itself is unaffected and serves normally. Reported upstream; the fix belongs
+in the image (`git config --system --add safe.directory /opt/magic_mirror`).
 
 ## Installing modules
 
@@ -79,11 +106,15 @@ on the container and run `npm install` in the module's directory.
 The template's tag selector offers three server-only variants. All are amd64-capable,
 which is all Unraid needs.
 
-| Tag | Base | Notes |
-|---|---|---|
-| `debian-server` | Debian 13 | Default. Broadest module compatibility. |
-| `wolfi-server` | Wolfi | Smaller, reduced CVE surface. |
-| `alpine` | Alpine | Smallest. Some native modules may fail to build. |
+| Tag | Base | Shell | Notes |
+|---|---|---|---|
+| `debian-server` | Debian 13 | `bash`, `sh` | Default. Broadest module compatibility. |
+| `wolfi-server` | Wolfi | `sh` only | Smaller, reduced CVE surface. |
+| `alpine` | Alpine | `sh` only | Smallest. Some native modules may fail to build. |
+
+The template's *Console Shell Command* is set to `bash`, which only exists in
+`debian-server`. Switch it to `sh` if you select one of the other two, otherwise opening a
+container console fails.
 
 The `*-electron` tags are intentionally not offered — they require a local display.
 
@@ -109,12 +140,9 @@ them from `templates/magicmirror.xml`:
 <Screenshot>https://raw.githubusercontent.com/heckpiet/magicmirror-unraid/main/preview.png</Screenshot>
 ```
 
-A browser screenshot of your own install represents this server-only container more
-honestly than a hardware render anyway.
-
 ## Handover checklist
 
-This repo is deliberately written so it can be transferred to, or forked by, the upstream
+This repo is deliberately written so it can be transferred to, or forked by, another
 maintainer. If you take it over, update these values so they point at your copy:
 
 - [ ] `templates/magicmirror.xml` → `<TemplateURL>`, `<ReadMe>`, `<Icon>`, `<Support>`
