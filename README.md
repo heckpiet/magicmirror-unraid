@@ -118,6 +118,20 @@ container console fails.
 
 The `*-electron` tags are intentionally not offered — they require a local display.
 
+## Repository contents
+
+| File | Purpose |
+|---|---|
+| `templates/magicmirror.xml` | The Unraid container template |
+| `ca_profile.xml` | Community Applications repository metadata |
+| `CHANGELOG.md` | Versioned history of the template |
+| `SBOM.md` | Software bill of materials and licence chain |
+| `scripts/verify-repo.sh` | Quality gate: XML, encoding, git metadata |
+| `scripts/check-links.sh` | Raw-URL reachability |
+| `scripts/test-unraid-images.sh` | Reproduces the runtime verification on a host |
+
+The quality gate and link check run in CI on every push.
+
 ## Where to report problems
 
 | Problem | Where |
