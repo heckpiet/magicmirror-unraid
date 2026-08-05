@@ -279,6 +279,13 @@ to make git reject the app directory
 `--global` hint git itself prints. Verified: `git rev-parse` succeeds as UID 99 on all
 three variants.
 
+**Registry metadata is not evidence.** Docker Hub's `last_updated` reported all three
+stable tags as published about an hour *before* the upstream commits they demonstrably
+contain, and its tags API returns per-architecture manifest digests while `docker pull`
+reports the multi-arch index digest — the two never match. Verify against the image:
+`docker run --rm --entrypoint sh <image> -c 'cat /etc/gitconfig'`. Both digest forms are
+recorded in `SBOM.md`; do not "correct" one to the other.
+
 **Shells differ per variant.** `/bin/bash` exists only in `debian-server`; `wolfi-server`
 and `alpine` ship `/bin/sh` (and `ash`) only. `<Shell>` is a single template-wide value, so
 it tracks the default `<Repository>` tag — currently `sh`, since the default is

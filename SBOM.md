@@ -8,7 +8,8 @@ build. What it *does* have is a supply chain: the template points Unraid users a
 third-party container image, which in turn packages a third-party application. That chain
 is what this document records.
 
-Last verified: **2026-08-04**
+Last verified: **2026-08-05**, against the images as actually pulled, not against
+registry metadata.
 
 ## Direct dependency
 
@@ -42,18 +43,32 @@ not a compromised digest.
 
 ### Tags referenced by the template
 
-Digests are amd64, the only architecture Unraid runs. They are a point-in-time record;
-these are rolling tags and will move.
+These are rolling tags and will move; the digests are a point-in-time record.
 
-| Tag | Role | amd64 digest | Size | Updated |
+**Two digests per tag, because they identify different objects.** The *index* digest is
+the multi-arch manifest list — this is what `docker pull` prints and what
+`docker image inspect --format '{{index .RepoDigests 0}}'` returns, so it is the one to
+compare against a running host. The *amd64* digest identifies the single-architecture
+image inside that list, which is what Docker Hub's tags API reports. They never match, and
+mistaking one for the other looks exactly like a tampered image.
+
+| Tag | Role | Index digest (what `docker pull` reports) | amd64 digest | Size |
 |---|---|---|---|---|
-| `wolfi-server` | default `<Repository>` | `sha256:1ade98af39129eaab97f09de77162c8a82ccfcb7fcaecf5f8f6db408aa88909b` | 95 MB | 2026-08-04 21:01 |
-| `debian-server` | selectable `<Branch>` | `sha256:018a57ddec3c9f18543e9d5adea7e5c5099e376cb8c791e05dda737bb4e797a8` | 108 MB | 2026-08-04 21:32 |
-| `alpine` | selectable `<Branch>` | `sha256:3509874e9332ce8b8cb03b2cccf341e2f9eaa552fdc11b65922d8d7207a89bbe` | 69 MB | 2026-08-04 21:15 |
+| `wolfi-server` | default `<Repository>` | `sha256:661e4edf55b97fe9508e4e15155dff4e3bff278043fe58c31e9e7660350fd9f3` | `sha256:1ade98af39129eaab97f09de77162c8a82ccfcb7fcaecf5f8f6db408aa88909b` | 95 MB |
+| `debian-server` | selectable `<Branch>` | `sha256:ca2a5bcdc0161b48a11863c9b0982ccc8d8eb6a025dae6abae8f017fc9dfa075` | `sha256:018a57ddec3c9f18543e9d5adea7e5c5099e376cb8c791e05dda737bb4e797a8` | 108 MB |
+| `alpine` | selectable `<Branch>` | `sha256:8348ce4a1a31a081932817a0260915d9662f871c90e32d535d08a3c869b96650` | `sha256:3509874e9332ce8b8cb03b2cccf341e2f9eaa552fdc11b65922d8d7207a89bbe` | 69 MB |
 
-All three were rebuilt on 2026-08-04 to carry the permission and `safe.directory` fixes
-listed below. `wolfi-server` is the default under §3's preference for minimal, audited
-bases.
+All three carry the permission and `safe.directory` fixes listed below, confirmed by
+inspecting the pulled images rather than by trusting registry metadata. `wolfi-server` is
+the default under §3's preference for minimal, audited bases.
+
+**Do not date a rebuild from Docker Hub's `last_updated`.** It reported all three tags as
+published roughly an hour *before* the upstream commits they demonstrably contain. The
+field is cached or means something other than "content pushed". Probe the image:
+
+```sh
+docker run --rm --entrypoint sh karsten13/magicmirror:wolfi-server -c 'cat /etc/gitconfig'
+```
 
 The `*-electron` tags are not referenced — they need a locally attached display.
 
@@ -108,7 +123,19 @@ responsibility; `wolfi-server` exists specifically as the reduced-CVE variant.
 
 ## Re-verification
 
-Digests and tag metadata:
+Index digests and the presence of both upstream fixes, read from the images themselves:
+
+```sh
+for TAG in wolfi-server debian-server alpine; do
+  docker pull -q "karsten13/magicmirror:$TAG"
+  docker image inspect "karsten13/magicmirror:$TAG" --format "$TAG {{index .RepoDigests 0}}"
+  docker run --rm --entrypoint sh "karsten13/magicmirror:$TAG" -c 'cat /etc/gitconfig'
+  docker run --rm --entrypoint sh "karsten13/magicmirror:$TAG" \
+    -c 'grep -h "ipWhitelist:" /opt/magic_mirror/__config/config.js.sample'
+done
+```
+
+The amd64 sub-digests, for the table above:
 
 ```powershell
 $r = Invoke-RestMethod "https://hub.docker.com/v2/repositories/karsten13/magicmirror/tags?page_size=100"
@@ -122,5 +149,5 @@ $r.results | Where-Object { $_.name -in @("debian-server","wolfi-server","alpine
 Runtime behaviour, against a real Unraid host:
 
 ```powershell
-ssh qhec02 'sh -s' < .tmp\test-unraid-images.sh
+ssh qhec02 'sh -s' < scripts\test-unraid-images.sh
 ```

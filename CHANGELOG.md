@@ -15,6 +15,25 @@ metadata only.
 
 Nothing yet.
 
+## [1.1.1] — 2026-08-05
+
+Documentation and metadata only. No change to the template's behaviour.
+
+### Fixed
+
+- `SBOM.md` recorded only the amd64 sub-digests while labelling them as the tag's digest.
+  Anyone comparing them against `docker pull` output would find a mismatch, since that
+  reports the multi-arch index digest instead. Both are now recorded per tag, with the
+  distinction spelled out — mistaking one for the other looks exactly like a tampered
+  image.
+
+### Added
+
+- A warning against dating an image rebuild from Docker Hub's `last_updated`. It reported
+  all three stable tags as published about an hour *before* the upstream commits they
+  demonstrably contain. The images were re-verified by inspecting `/etc/gitconfig` and the
+  shipped `config.js.sample` directly, which is now the documented method.
+
 ## [1.1.0] — 2026-08-04
 
 Upstream fixed both defects this template had reported, which removed the last reason to
@@ -102,6 +121,7 @@ Not yet submitted to Community Applications. The upstream image maintainer was o
 listing and declined — he has no Unraid system to test on — so this repository remains the
 maintainer of record.
 
-[Unreleased]: https://github.com/heckpiet/magicmirror-unraid/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/heckpiet/magicmirror-unraid/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/heckpiet/magicmirror-unraid/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/heckpiet/magicmirror-unraid/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/heckpiet/magicmirror-unraid/releases/tag/v1.0.0
